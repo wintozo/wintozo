@@ -20,7 +20,6 @@ export default function MobileContactsPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState("");
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const presenceRef = useRef<any>(null);
 
   useEffect(() => {
@@ -44,7 +43,6 @@ export default function MobileContactsPage() {
           console.error("Contacts load error:", error);
         }
         if (data) setUsers(data as User[]);
-        setLoading(false);
       });
 
     // Presence отдельно
@@ -74,14 +72,6 @@ export default function MobileContactsPage() {
   const filteredUsers = users.filter((u) =>
     u.username.toLowerCase().includes(search.toLowerCase())
   );
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center pb-16 transition-colors">
-        <div className="w-12 h-12 border-4 border-blue-200 dark:border-gray-700 border-t-blue-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex flex-col transition-colors">

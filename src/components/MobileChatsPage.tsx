@@ -31,7 +31,6 @@ export default function MobileChatsPage() {
   const [favLastMsg, setFavLastMsg] = useState<string | null>(null);
   const [favLastTime, setFavLastTime] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const saved = localStorage.getItem("wintozo_username");
@@ -53,7 +52,6 @@ export default function MobileChatsPage() {
       .order("created_at", { ascending: false });
 
     if (!messages || messages.length === 0) {
-      setLoading(false);
       return;
     }
 
@@ -101,20 +99,11 @@ export default function MobileChatsPage() {
     });
 
     setChats(result);
-    setLoading(false);
   };
 
   const filteredChats = chats.filter((c) =>
     c.username.toLowerCase().includes(search.toLowerCase())
   );
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center pb-16 transition-colors">
-        <div className="w-12 h-12 border-4 border-blue-200 dark:border-gray-700 border-t-blue-500 dark:border-t-blue-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex flex-col transition-colors">

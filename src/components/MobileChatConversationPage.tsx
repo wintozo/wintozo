@@ -47,7 +47,6 @@ export default function MobileChatConversationPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showAdmin, setShowAdmin] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
@@ -116,55 +115,6 @@ export default function MobileChatConversationPage() {
       msgData.forEach((msg: Message) => messageIdsRef.current.add(msg.id));
       setMessages(msgData);
     }
-    setLoading(false);
-
-    // Подписка на новые сообщения
-    if (subscriptionRef.current) supabase.removeChannel(subscriptionRef.current);
-    const channel = supabase
-      .channel(`chat_${[current, contact].sort().join("_")}`)
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "wintozo_messages",
-      }, (payload) => {
-        const msg = payload.new as Message;
-        if (
-          (msg.from_user === contact && msg.to_user === current) ||
-          (msg.from_user === current && msg.to_user === contact)
-        ) {
-          if (!messageIdsRef.current.has(msg.id)) {
-            messageIdsRef.current.add(msg.id);
-            setMessages((prev) => [...prev, msg]);
-            if (msg.from_user === contact) {
-              const body = msg.audio_url ? "Голосовое сообщение" : msg.image_url ? "Фото" : (msg.text || "Новое сообщение");
-              showNotification(msg.from_user, body);
-            }
-          }
-        }
-      })
-      .subscribe();
-    subscriptionRef.current = channel;
-
-    // Presence
-    if (presenceRef.current) supabase.removeChannel(presenceRef.current);
-    const pch = supabase.channel("presence_wintozo");
-    presenceRef.current = pch;
-    pch
-      .on("presence", { event: "sync" }, () => {
-        const state = pch.presenceState();
-        const online: string[] = [];
-        Object.values(state).forEach((arr: any) => {
-          arr.forEach((item: any) => {
-            if (item.username) online.push(item.username);
-          });
-        });
-        setOnlineUsers(online);
-      })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          await pch.track({ username: current });
-        }
-      });
   };
 
   useEffect(() => {
@@ -366,14 +316,6 @@ export default function MobileChatConversationPage() {
       if (e.target) e.target.value = "";
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center transition-colors">
-        <div className="w-12 h-12 border-4 border-blue-200 dark:border-gray-700 border-t-blue-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 flex flex-col transition-colors">
