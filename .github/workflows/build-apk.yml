@@ -40,16 +40,17 @@ jobs:
 
     - name: Configure Android app
       run: |
-        # Обновляем AndroidManifest.xml - имя приложения и разрешения
+        # Обновляем AndroidManifest.xml - имя приложения
         sed -i 's/android:label="[^"]*"/android:label="Messenger Wintozo"/g' android/app/src/main/AndroidManifest.xml
         sed -i 's/<application/<application\n    android:usesCleartextTraffic="true"/g' android/app/src/main/AndroidManifest.xml
         
-        # Добавляем разрешения на микрофон
-        sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.RECORD_AUDIO" />' android/app/src/main/AndroidManifest.xml
-        sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
-        sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.RECORD_AUDIO" android:maxSdkVersion="33" />' android/app/src/main/AndroidManifest.xml
-        sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />' android/app/src/main/AndroidManifest.xml
-        sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />' android/app/src/main/AndroidManifest.xml
+        # Добавляем разрешения на микрофон (без дублей)
+        if ! grep -q "RECORD_AUDIO" android/app/src/main/AndroidManifest.xml; then
+          sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.RECORD_AUDIO" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<\/manifest>/i <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />' android/app/src/main/AndroidManifest.xml
+        fi
         
         # Обновляем build.gradle
         sed -i 's/applicationId "org.wintozo.app"/applicationId "org.wintozo.messenger"/g' android/app/build.gradle
