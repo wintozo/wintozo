@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
 
 export function useVoiceRecorder() {
   const [isRecording, setIsRecording] = useState(false);
@@ -9,8 +10,19 @@ export function useVoiceRecorder() {
 
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      // Проверка что мы в приложении
+      if (Capacitor.isNativePlatform()) {
+        console.log("Capacitor native platform detected");
+      }
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        } 
+      });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
       chunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
@@ -25,9 +37,15 @@ export function useVoiceRecorder() {
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Ошибка доступа к микрофону:", err);
-      alert("Нет доступа к микрофону. Разрешите доступ в настройках браузера.");
+      let msg = "Нет доступа к микрофону. ";
+      if (Capacitor.isNativePlatform()) {
+        msg += "Разрешите доступ к микрофону в настройках приложения Android.";
+      } else {
+        msg += "Разрешите доступ в настройках браузера.";
+      }
+      alert(msg);
     }
   }, []);
 
