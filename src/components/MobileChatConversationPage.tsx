@@ -455,7 +455,6 @@ export default function MobileChatConversationPage() {
       <form onSubmit={handleSendText} className="bg-white dark:bg-gray-800 border-t-2 border-blue-200 dark:border-gray-700 p-2 flex items-center gap-2 transition-colors">
         {sendingImage ? (
           <div className="flex-1 flex items-center justify-center py-2">
-            <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-500 rounded-full animate-spin" />
             <span className="text-sm text-gray-400 ml-2">Отправка фото...</span>
           </div>
         ) : isRecording ? (
