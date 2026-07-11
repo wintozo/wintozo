@@ -102,6 +102,12 @@ export default function MobileCreateGroup() {
         return;
       }
 
+      // Добавляем создателя как участника группы
+      await supabase.from("wintozo_group_members").insert({
+        group_id: data.id,
+        username: username,
+      });
+
       setCreatedId(data.id);
     } catch (err: any) {
       setError("Ошибка: " + (err?.message || "не удалось создать группу"));
@@ -110,7 +116,7 @@ export default function MobileCreateGroup() {
   };
 
   const shareLink = createdId
-    ? `https://wintozo.vercel.app/mobile/test/chat/group/${createdId}`
+    ? `https://wintozo.vercel.app/chat/priglashenie/group/${createdId}`
     : "";
 
   const handleCopy = () => {

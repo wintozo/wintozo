@@ -207,8 +207,7 @@ export default function MobileGroupChat() {
   };
 
   const handleShare = () => {
-    const isMobile = window.innerWidth < 768;
-    const url = `https://wintozo.vercel.app/${isMobile ? "mobile" : "pc"}/test/chat/group/${groupId}`;
+    const url = `https://wintozo.vercel.app/chat/priglashenie/group/${groupId}`;
     if (navigator.share) {
       navigator.share({ title: groupName, url });
     } else {

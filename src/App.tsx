@@ -9,6 +9,7 @@ import MobileSettingsPage from "./components/MobileSettingsPage";
 import MobileChatConversationPage from "./components/MobileChatConversationPage";
 import MobileGroupChat from "./components/MobileGroupChat";
 import MobileCreateGroup from "./components/MobileCreateGroup";
+import MobileGroupInvitePage from "./components/MobileGroupInvitePage";
 import MobileGroupsPage from "./components/MobileGroupsPage";
 import MobileBattlePage from "./components/MobileBattlePage";
 import SolnechnayaAuthPage from "./components/SolnechnayaAuthPage";
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/mobile/test/chat/group/new" element={<MobileCreateGroup />} />
         <Route path="/mobile/test/chat/group/:groupId" element={<MobileGroupChat />} />
         <Route path="/pc/test/chat/group/:groupId" element={<MobileGroupChat />} />
+        <Route path="/chat/priglashenie/group/:groupId" element={<MobileGroupInvitePage />} />
         <Route path="/mobile/test/settings" element={<MobileSettingsPage />} />
         <Route path="/test/chat" element={<ChatPage />} />
 

@@ -31,7 +31,17 @@ export default function MobileGroupsPage() {
       .select("group_id")
       .eq("from_user", current);
 
-    const groupIds = [...new Set((msgData || []).map((m: any) => m.group_id))];
+    const msgGroupIds = (msgData || []).map((m: any) => m.group_id);
+
+    // Находим group_id где пользователь состоит как участник (по приглашению)
+    const { data: memberData } = await supabase
+      .from("wintozo_group_members")
+      .select("group_id")
+      .eq("username", current);
+
+    const memberGroupIds = (memberData || []).map((m: any) => m.group_id);
+
+    const groupIds = [...new Set([...msgGroupIds, ...memberGroupIds])];
 
     if (groupIds.length === 0) {
       setLoading(false);
