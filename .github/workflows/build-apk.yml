@@ -36,7 +36,7 @@ jobs:
 
     - name: Create Capacitor project
       run: |
-        npx @capacitor/cli@latest init wintozo org.wintozo.messenger --web-dir=dist --no-open
+        npx @capacitor/cli@latest init wintozo org.wintozo.messenger --web-dir=dist
         npx @capacitor/cli@latest add android
 
     - name: Configure Android manifest
