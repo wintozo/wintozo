@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
-import AuthPage from "./components/AuthPage";
+import MessengerUsernamePage from "./components/MessengerUsernamePage";
+import MessengerPasswordPage from "./components/MessengerPasswordPage";
 import SelectDevicePage from "./components/SelectDevicePage";
-import ChatPage from "./components/ChatPage";
+import StyleSelectorPage from "./components/StyleSelectorPage";
+import NewMobileChatPage from "./components/NewMobileChatPage";
 import MobileChatsPage from "./components/MobileChatsPage";
 import MobileContactsPage from "./components/MobileContactsPage";
 import MobileSettingsPage from "./components/MobileSettingsPage";
@@ -16,6 +18,7 @@ import SolnechnayaAuthPage from "./components/SolnechnayaAuthPage";
 import SolnechnayaSelectPage from "./components/SolnechnayaSelectPage";
 import SolnechnayaMobileChat from "./components/SolnechnayaMobileChat";
 import SolnechnayaComputerChat from "./components/SolnechnayaComputerChat";
+import { CallProvider } from "./store/useCallStore";
 
 function ScrollToTop() {
   const pathname = useLocation().pathname;
@@ -35,7 +38,7 @@ function RootRedirect() {
     return <Navigate to={solnechnayaLogged ? "/solnechnaya/registration/select" : "/solnechnaya/registration"} replace />;
   }
   
-  return <Navigate to={logged ? "/test/registration/select" : "/test/registration"} replace />;
+  return <Navigate to={logged ? "/registration/select" : "/registration/messenger/username"} replace />;
 }
 
 function SolnechnayaRedirect() {
@@ -46,34 +49,48 @@ function SolnechnayaRedirect() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ScrollToTop />
-      <Routes>
-        {/* === Wintozo Test === */}
-        <Route path="/" element={<RootRedirect />} />
-        <Route path="/test/registration" element={<AuthPage />} />
-        <Route path="/test/registration/select" element={<SelectDevicePage />} />
-        <Route path="/pc/test/chat" element={<ChatPage />} />
-        <Route path="/mobile/test/chat" element={<MobileChatsPage />} />
-        <Route path="/mobile/test/chat/contacts" element={<MobileContactsPage />} />
-        <Route path="/mobile/test/chat/groups" element={<MobileGroupsPage />} />
-        <Route path="/mobile/test/chat/battle" element={<MobileBattlePage />} />
-        <Route path="/mobile/test/chat/:username" element={<MobileChatConversationPage />} />
-        <Route path="/mobile/test/chat/group/new" element={<MobileCreateGroup />} />
-        <Route path="/mobile/test/chat/group/:groupId" element={<MobileGroupChat />} />
-        <Route path="/pc/test/chat/group/:groupId" element={<MobileGroupChat />} />
-        <Route path="/chat/priglashenie/group/:groupId" element={<MobileGroupInvitePage />} />
-        <Route path="/mobile/test/settings" element={<MobileSettingsPage />} />
-        <Route path="/test/chat" element={<ChatPage />} />
+      <CallProvider>
+        <ScrollToTop />
+        <Routes>
+          {/* === Wintozo — новые маршруты === */}
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/registration/messenger/username" element={<MessengerUsernamePage />} />
+          <Route path="/registration/messenger/password" element={<MessengerPasswordPage />} />
+          <Route path="/registration/select/style" element={<StyleSelectorPage />} />
 
-        {/* === Деревня Солнечная (скрытый раздел) === */}
-        <Route path="/solnechnaya" element={<SolnechnayaRedirect />} />
-        <Route path="/solnechnaya/registration" element={<SolnechnayaAuthPage />} />
-        <Route path="/solnechnaya/registration/select" element={<SolnechnayaSelectPage />} />
-        <Route path="/solnechnaya/mobile/chat" element={<SolnechnayaMobileChat />} />
-        <Route path="wintozo/chat/test/solnechnaya/computer/chat" element={<SolnechnayaComputerChat />} />
+          {/* === Wintozo — новые маршруты (новая тема) === */}
+          <Route path="/mobile/new/chat" element={<NewMobileChatPage />} />
+          <Route path="/mobile/new/chat/contacts" element={<NewMobileChatPage />} />
+          <Route path="/mobile/new/chat/groups" element={<NewMobileChatPage />} />
+          <Route path="/mobile/new/chat/battle" element={<NewMobileChatPage />} />
+          <Route path="/mobile/new/chat/:username" element={<NewMobileChatPage />} />
+          <Route path="/mobile/new/chat/group/new" element={<NewMobileChatPage />} />
+          <Route path="/mobile/new/chat/group/:groupId" element={<NewMobileChatPage />} />
+          <Route path="/mobile/new/settings" element={<NewMobileChatPage />} />
 
-        <Route path="*" element={<RootRedirect />} />
-      </Routes>
+          {/* === Wintozo — основные маршруты (старая тема) === */}
+          <Route path="/registration" element={<MessengerUsernamePage />} />
+          <Route path="/registration/select" element={<SelectDevicePage />} />
+          <Route path="/mobile/test/chat" element={<MobileChatsPage />} />
+          <Route path="/mobile/test/chat/contacts" element={<MobileContactsPage />} />
+          <Route path="/mobile/test/chat/groups" element={<MobileGroupsPage />} />
+          <Route path="/mobile/test/chat/battle" element={<MobileBattlePage />} />
+          <Route path="/mobile/test/chat/:username" element={<MobileChatConversationPage />} />
+          <Route path="/mobile/test/chat/group/new" element={<MobileCreateGroup />} />
+          <Route path="/mobile/test/chat/group/:groupId" element={<MobileGroupChat />} />
+          <Route path="/chat/priglashenie/group/:groupId" element={<MobileGroupInvitePage />} />
+          <Route path="/mobile/test/settings" element={<MobileSettingsPage />} />
+
+          {/* === Деревня Солнечная (скрытый раздел) === */}
+          <Route path="/solnechnaya" element={<SolnechnayaRedirect />} />
+          <Route path="/solnechnaya/registration" element={<SolnechnayaAuthPage />} />
+          <Route path="/solnechnaya/registration/select" element={<SolnechnayaSelectPage />} />
+          <Route path="/solnechnaya/mobile/chat" element={<SolnechnayaMobileChat />} />
+          <Route path="wintozo/chat/test/solnechnaya/computer/chat" element={<SolnechnayaComputerChat />} />
+
+          <Route path="*" element={<RootRedirect />} />
+        </Routes>
+      </CallProvider>
     </BrowserRouter>
   );
 }

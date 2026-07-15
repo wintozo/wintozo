@@ -49,7 +49,7 @@ export default function AuthPage() {
         localStorage.setItem("wintozo_avatar", existingUser.avatar || "W");
         localStorage.setItem("wintozo_avatar_url", existingUser.avatar_url || "");
         localStorage.setItem("wintozo_description", existingUser.description || "");
-        navigate("/test/registration/select");
+        navigate("/registration/select");
       } else {
         const letters = "WVSMDKALNP";
         const randomAvatar = letters[Math.floor(Math.random() * letters.length)];
@@ -71,7 +71,7 @@ export default function AuthPage() {
         localStorage.setItem("wintozo_avatar", randomAvatar);
         localStorage.setItem("wintozo_avatar_url", "");
         localStorage.setItem("wintozo_description", "");
-        navigate("/test/registration/select");
+        navigate("/registration/select");
       }
     } catch (err: any) {
       setError(err?.message || "Ошибка подключения");
@@ -151,6 +151,20 @@ export default function AuthPage() {
                 <ArrowRight className="w-5 h-5" />
               </>
             )}
+          </button>
+
+          <button
+            onClick={() => navigate("/dev/registration/username")}
+            className="w-full py-3 bg-gradient-to-r from-red-500 to-purple-600 text-white font-bold rounded-xl hover:from-red-600 hover:to-purple-700 transition-all shadow-md flex items-center justify-center gap-2 mt-3"
+          >
+            🧪 Войти в Режим тестера
+          </button>
+
+          <button
+            onClick={() => navigate("/registration/messenger/username")}
+            className="w-full py-3 bg-gradient-to-r from-purple-500 to-blue-600 text-white font-bold rounded-xl hover:from-purple-600 hover:to-blue-700 transition-all shadow-md flex items-center justify-center gap-2 mt-3"
+          >
+            ✨ Попробовать новый стиль регистрации
           </button>
 
           <p className="text-center text-gray-500 dark:text-gray-400 text-sm mt-4">

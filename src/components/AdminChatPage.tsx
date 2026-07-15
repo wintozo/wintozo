@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Send, LogOut, Search, MessageCircleIcon, Users, Settings,
-  Bell, Moon, Shield, Info, ChevronRight, Camera, Check, X, Star, Mic, Trash2, Image as ImageIcon, Users2, Plus, Zap, Crown, MessageSquare, Phone, PhoneOff, Palette,
+  Bell, Moon, Shield, Info, ChevronRight, Camera, Check, X, Star, Mic, Trash2, Image as ImageIcon, Users2, Plus, Zap, Crown, MessageSquare, Terminal, Phone, PhoneOff,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import Avatar from "./Avatar";
@@ -15,7 +15,7 @@ import { useDarkMode } from "../hooks/useDarkMode";
 import { useVoiceRecorder } from "../hooks/useVoiceRecorder";
 import { requestNotificationPermission, showNotification } from "../lib/notifications";
 import VoicePlayer from "./VoicePlayer";
-import AdminPanel from "./AdminPanel";
+import AdminTerminal from "./AdminTerminal";
 import CallModal from "./CallModal";
 import { useCallStore } from "../store/useCallStore";
 import { cachedQuery, debounce } from "../lib/supabase-cache";
@@ -35,7 +35,7 @@ type User = {
   avatar: string;
   avatar_url: string | null;
   description: string | null;
-  status: string;
+  status?: string;
 };
 
 type ChatPreview = {
@@ -61,7 +61,7 @@ function formatLastTime(dateStr: string): string {
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 }
 
-export default function ChatPage() {
+export default function AdminChatPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [avatar, setAvatar] = useState("W");
@@ -70,7 +70,7 @@ export default function ChatPage() {
   const [editDesc, setEditDesc] = useState(false);
   const [descInput, setDescInput] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -87,10 +87,8 @@ export default function ChatPage() {
   const [notifications, setNotifications] = useState(true);
   const [proStatus, setProStatus] = useState<ProStatus>({ active: false });
   const [messageColor, setMessageColor] = useState("");
-  const [appAccentColor, setAppAccentColor] = useState("");
   const [adminContacts, setAdminContacts] = useState(2);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showAppColorPicker, setShowAppColorPicker] = useState(false);
   const [showWarnBanner, setShowWarnBanner] = useState(false);
   const [warnReason, setWarnReason] = useState("");
   const [warnBy, setWarnBy] = useState("");
@@ -103,25 +101,21 @@ export default function ChatPage() {
   const { darkMode, toggle } = useDarkMode();
   const { isRecording, recordingTime, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
   const { callTarget, showCallModal, openCall, closeCall } = useCallStore();
-  const [incomingCallTarget, setIncomingCallTarget] = useState<string | null>(null);
-  const [showIncomingCallModal, setShowIncomingCallModal] = useState(false);
 
   useEffect(() => {
     const savedUsername = localStorage.getItem("wintozo_username");
     const savedAvatar = localStorage.getItem("wintozo_avatar");
     const savedAvatarUrl = localStorage.getItem("wintozo_avatar_url");
     const savedDesc = localStorage.getItem("wintozo_description");
-    const savedAccent = localStorage.getItem("wintozo_app_accent");
-    if (!savedUsername) {
-      navigate("/registration");
+    if (!savedUsername || savedUsername !== "Admin") {
+      navigate("/admin/registration");
       return;
     }
     setUsername(savedUsername);
-    setAvatar(savedAvatar || "W");
+    setAvatar(savedAvatar || "A");
     setAvatarUrl(savedAvatarUrl || null);
     setDescription(savedDesc || "");
     setDescInput(savedDesc || "");
-    setAppAccentColor(savedAccent || "");
     requestNotificationPermission();
     loadUsers(savedUsername);
     loadChats(savedUsername);
@@ -164,14 +158,6 @@ export default function ChatPage() {
     } catch {}
   };
 
-  const handleAppColorChange = (color: string) => {
-    setAppAccentColor(color);
-    setShowAppColorPicker(false);
-    localStorage.setItem("wintozo_app_accent", color);
-    // Применяем цвет к корневому элементу
-    document.documentElement.style.setProperty("--app-accent", color);
-  };
-
   const handleContactAdmin = async () => {
     if (!proStatus.active) return;
     try {
@@ -185,15 +171,17 @@ export default function ChatPage() {
     } catch {}
   };
 
-  // Загрузка всех пользователей
   const loadUsers = async (current: string) => {
     const { data, error } = await supabase
       .from("wintozo_users")
-      .select("username, avatar, avatar_url, description, status")
+      .select("username, avatar, avatar_url, description")
       .neq("username", current)
       .order("username", { ascending: true });
-    if (error) console.error("loadUsers:", error);
-    if (data) setUsers(data);
+    if (error) {
+      console.error("loadUsers:", error);
+      alert("Ошибка загрузки пользователей: " + error.message);
+    }
+    if (data) setUsers(data as any[]);
   };
 
   const loadPcGroups = async (current: string) => {
@@ -300,60 +288,47 @@ export default function ChatPage() {
       .eq("username", username);
   };
 
-  // Загрузка списка чатов (с кем уже общался) — оптимизировано с кэшем
-  const loadChats = useCallback(
-    debounce(async (current: string) => {
-      const messagesResult = await cachedQuery(
-        `chats_${current}`,
-        async () =>
-          await supabase
-            .from("wintozo_messages")
-            .select("from_user, to_user, text, created_at, id")
-            .or(`from_user.eq.${current},to_user.eq.${current}`)
-            .order("created_at", { ascending: false })
-            .limit(200),
-        2 * 60 * 1000 // кэш 2 минуты
-      );
+  const loadChats = async (current: string) => {
+    const { data: messages } = await supabase
+      .from("wintozo_messages")
+      .select("*")
+      .or(`from_user.eq.${current},to_user.eq.${current}`)
+      .order("created_at", { ascending: false });
 
-      const messages = messagesResult?.data;
-      if (!messages || messages.length === 0) return;
+    if (!messages || messages.length === 0) return;
 
-      const chatMap = new Map<string, { last_message: string | null; last_time: string }>();
-      for (const msg of messages) {
-        if (msg.from_user === current && msg.to_user === current) continue;
-        const other = msg.from_user === current ? msg.to_user : msg.from_user;
-        if (!chatMap.has(other)) {
-          chatMap.set(other, { last_message: msg.text, last_time: msg.created_at });
-        }
+    const chatMap = new Map<string, { last_message: string | null; last_time: string }>();
+    for (const msg of messages) {
+      if (msg.from_user === current && msg.to_user === current) continue;
+      const other = msg.from_user === current ? msg.to_user : msg.from_user;
+      if (!chatMap.has(other)) {
+        chatMap.set(other, { last_message: msg.text, last_time: msg.created_at });
       }
+    }
 
-      const usernames = Array.from(chatMap.keys());
-      const usersResult = await cachedQuery(
-        `users_${usernames.join(",")}`,
-        async () =>
-          await supabase
-            .from("wintozo_users")
-            .select("username, avatar, avatar_url")
-            .in("username", usernames),
-        10 * 60 * 1000 // кэш 10 минут
-      );
+    const usernames = Array.from(chatMap.keys());
+    const { data: usersData } = await supabase
+      .from("wintozo_users")
+      .select("username, avatar, avatar_url")
+      .in("username", usernames);
 
-      const usersData = usersResult?.data;
-      const result: ChatPreview[] = usernames.map((uname) => {
-        const u = usersData?.find((x: any) => x.username === uname);
-        const info = chatMap.get(uname)!;
-        return { username: uname, avatar: u?.avatar || "W", avatar_url: u?.avatar_url || null, last_message: info.last_message, last_time: info.last_time };
-      });
+    const result: ChatPreview[] = usernames.map((uname) => {
+      const u = usersData?.find((x) => x.username === uname);
+      const info = chatMap.get(uname)!;
+      return { username: uname, avatar: u?.avatar || "W", avatar_url: u?.avatar_url || null, last_message: info.last_message, last_time: info.last_time };
+    });
 
-      result.sort((a, b) => new Date(b.last_time!).getTime() - new Date(a.last_time!).getTime());
-      setChats(result);
-    }, 500),
-    []
-  );
+    result.sort((a, b) => new Date(b.last_time!).getTime() - new Date(a.last_time!).getTime());
+    setChats(result);
+  };
 
-  // ОДНА ГЛОБАЛЬНАЯ ПОДПИСКА НА ВСЕ СООБЩЕНИЯ (работает всегда)
+  // ОДНА подписка на все сообщения + ОДНА подписка на presence (не на чат!)
   useEffect(() => {
     if (!username) return;
+
+    messageIdsRef.current.clear();
+    setMessages([]);
+    if (selectedUser) loadMessages();
 
     // УНИЧТОЖАЕМ СТАРЫЕ ПОДПИСКИ
     if (subscriptionRef.current) {
@@ -370,7 +345,6 @@ export default function ChatPage() {
         table: "wintozo_messages",
       }, (payload) => {
         const msg = payload.new as Message;
-        // Фильтруем: добавляем только если это наш чат
         const isInChat =
           (msg.from_user === selectedUser?.username && msg.to_user === username) ||
           (msg.from_user === username && msg.to_user === selectedUser?.username);
@@ -415,7 +389,7 @@ export default function ChatPage() {
       if (subscriptionRef.current) supabase.removeChannel(subscriptionRef.current);
       if (presenceRef.current) supabase.removeChannel(presenceRef.current);
     };
-  }, [username]); // ← Убрали selectedUser из зависимостей!
+  }, [username]);
 
   // Загружаем сообщения при открытии чата
   useEffect(() => {
@@ -446,14 +420,6 @@ export default function ChatPage() {
     if (!inputText.trim() || !selectedUser) return;
 
     const text = inputText.trim();
-
-    // Команда /admin — только для Admin в Избранном (self-chat)
-    if (text === "/admin" && username === "Admin" && selectedUser.username === username) {
-      setInputText("");
-      setShowAdmin(true);
-      return;
-    }
-
     setInputText("");
 
     const { data } = await supabase.from("wintozo_messages").insert({
@@ -477,7 +443,8 @@ export default function ChatPage() {
     localStorage.removeItem("wintozo_avatar_url");
     localStorage.removeItem("wintozo_description");
     localStorage.removeItem("wintozo_device");
-    navigate("/registration");
+    localStorage.removeItem("wintozo_is_admin");
+    navigate("/admin/registration");
   };
 
   const openChat = (u: User | ChatPreview) => {
@@ -577,7 +544,6 @@ export default function ChatPage() {
     u.username.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Удалить чат из списка
   const removeChat = (chatUsername: string) => {
     setChats((prev) => prev.filter((c) => c.username !== chatUsername));
     if (selectedUser?.username === chatUsername) {
@@ -588,42 +554,51 @@ export default function ChatPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center transition-colors">
-        <div className="w-16 h-16 border-4 border-blue-200 dark:border-gray-700 border-t-blue-500 rounded-full animate-spin" />
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 to-indigo-900 flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex transition-colors">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 flex transition-colors">
       <ReleaseBanner />
-       {/* Боковая панель */}
-       <div className="w-80 bg-white dark:bg-gray-800 border-r-2 border-blue-200 dark:border-gray-700 flex flex-col h-screen transition-colors">
-         {/* Шапка с пользователем */}
-        <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 text-white">
+      {/* Боковая панель */}
+      <div className="w-80 bg-white dark:bg-gray-800 border-r-2 border-purple-200 dark:border-gray-700 flex flex-col h-screen transition-colors">
+        {/* Шапка */}
+        <div className="bg-gradient-to-r from-purple-500 to-indigo-500 p-4 text-white">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Avatar avatarUrl={avatarUrl} avatarLetter={avatar} size="sm" />
               <div>
                 <p className="font-black text-lg">{username}</p>
-                <p className="text-blue-100 text-xs">{description || "Wintozo"}</p>
+                <p className="text-purple-100 text-xs">{description || "Wintozo Admin"}</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-              title="Выйти"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowTerminal(true)}
+                className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                title="Терминал"
+              >
+                <Terminal className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                title="Выйти"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          {/* 3 вкладки */}
+          {/* Вкладки */}
           <div className="flex gap-1 bg-black/10 rounded-xl p-1">
             <button
               onClick={() => setTab("chats")}
               className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                tab === "chats" ? "bg-white text-blue-600" : "text-white/80 hover:bg-white/10"
+                tab === "chats" ? "bg-white text-purple-600" : "text-white/80 hover:bg-white/10"
               }`}
             >
               <MessageCircleIcon className="w-4 h-4" />
@@ -632,7 +607,7 @@ export default function ChatPage() {
             <button
               onClick={() => setTab("contacts")}
               className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                tab === "contacts" ? "bg-white text-blue-600" : "text-white/80 hover:bg-white/10"
+                tab === "contacts" ? "bg-white text-purple-600" : "text-white/80 hover:bg-white/10"
               }`}
             >
               <Users className="w-4 h-4" />
@@ -641,7 +616,7 @@ export default function ChatPage() {
             <button
               onClick={() => setTab("groups")}
               className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                tab === "groups" ? "bg-white text-blue-600" : "text-white/80 hover:bg-white/10"
+                tab === "groups" ? "bg-white text-purple-600" : "text-white/80 hover:bg-white/10"
               }`}
             >
               <Users2 className="w-4 h-4" />
@@ -650,7 +625,7 @@ export default function ChatPage() {
             <button
               onClick={() => setTab("settings")}
               className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                tab === "settings" ? "bg-white text-blue-600" : "text-white/80 hover:bg-white/10"
+                tab === "settings" ? "bg-white text-purple-600" : "text-white/80 hover:bg-white/10"
               }`}
             >
               <Settings className="w-4 h-4" />
@@ -659,9 +634,9 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Поиск (только для чатов и контактов) */}
+        {/* Поиск */}
         {tab !== "settings" && (
-          <div className="p-3 bg-white dark:bg-gray-800 border-b border-blue-100 dark:border-gray-700">
+          <div className="p-3 bg-white dark:bg-gray-800 border-b border-purple-100 dark:border-gray-700">
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
               <input
@@ -669,7 +644,7 @@ export default function ChatPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={tab === "chats" ? "Поиск чатов..." : "Поиск контактов..."}
-                className="w-full pl-9 pr-3 py-2 rounded-xl border-2 border-blue-200 dark:border-gray-600 focus:border-blue-500 focus:outline-none text-gray-800 dark:text-gray-100 dark:bg-gray-700 dark:placeholder-gray-500 text-sm transition-colors"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border-2 border-purple-200 dark:border-gray-600 focus:border-purple-500 focus:outline-none text-gray-800 dark:text-gray-100 dark:bg-gray-700 dark:placeholder-gray-500 text-sm transition-colors"
               />
             </div>
           </div>
@@ -680,12 +655,11 @@ export default function ChatPage() {
           {/* ЧАТЫ */}
           {tab === "chats" && (
             <>
-              {/* Избранное (всегда сверху) */}
               {!search && (
                 <button
                   onClick={() => openChat({ username, avatar, avatar_url: avatarUrl, description: null, status: "offline" } as User)}
-                  className={`w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors border-b border-blue-100 dark:border-gray-700 ${
-                    selectedUser?.username === username ? "bg-blue-100 dark:bg-blue-900/30" : ""
+                  className={`w-full flex items-center gap-3 p-3 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors border-b border-purple-100 dark:border-gray-700 ${
+                    selectedUser?.username === username ? "bg-purple-100 dark:bg-purple-900/30" : ""
                   }`}
                 >
                   <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shrink-0">
@@ -693,9 +667,7 @@ export default function ChatPage() {
                   </div>
                   <div className="text-left flex-1 min-w-0">
                     <p className="font-bold text-gray-800 dark:text-gray-100">Избранное</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {username === "Admin" ? "Команда /admin — панель управления" : "Сохраняйте сообщения здесь"}
-                    </p>
+                    <p className="text-xs text-gray-400 truncate">Сохраняйте сообщения здесь</p>
                   </div>
                 </button>
               )}
@@ -710,8 +682,8 @@ export default function ChatPage() {
                   <button
                     key={c.username}
                     onClick={() => openChat(c)}
-                    className={`w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors border-b border-blue-100 dark:border-gray-700 ${
-                      selectedUser?.username === c.username ? "bg-blue-100 dark:bg-blue-900/30" : ""
+                    className={`w-full flex items-center gap-3 p-3 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors border-b border-purple-100 dark:border-gray-700 ${
+                      selectedUser?.username === c.username ? "bg-purple-100 dark:bg-purple-900/30" : ""
                     }`}
                   >
                     <Avatar avatarUrl={c.avatar_url} avatarLetter={c.avatar} size="lg" />
@@ -741,8 +713,8 @@ export default function ChatPage() {
                   <button
                     key={u.username}
                     onClick={() => openChat(u)}
-                    className={`w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors border-b border-blue-100 dark:border-gray-700 ${
-                      selectedUser?.username === u.username ? "bg-blue-100 dark:bg-blue-900/30" : ""
+                    className={`w-full flex items-center gap-3 p-3 hover:bg-purple-50 dark:hover:bg-gray-700 transition-colors border-b border-purple-100 dark:border-gray-700 ${
+                      selectedUser?.username === u.username ? "bg-purple-100 dark:bg-purple-900/30" : ""
                     }`}
                   >
                     <div className="relative shrink-0">
@@ -772,7 +744,7 @@ export default function ChatPage() {
           {tab === "groups" && (
             <div className="p-3 space-y-2">
               <button
-                onClick={() => navigate("/mobile/chat/group/new")}
+                onClick={() => navigate("/admin/mobile/chat/group/new")}
                 className="w-full flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-700 border-2 border-dashed border-purple-300 dark:border-gray-500 hover:bg-purple-50 dark:hover:bg-gray-600 transition-colors"
               >
                 <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-indigo-500 rounded-xl flex items-center justify-center shrink-0">
@@ -787,14 +759,13 @@ export default function ChatPage() {
                 <div className="text-center py-12 text-gray-400">
                   <Users2 className="w-12 h-12 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">Вы не участвуете в группах</p>
-                  <p className="text-xs">Создайте или откройте ссылку</p>
                 </div>
               ) : (
                 pcGroups.map((g) => (
                   <button
                     key={g.id}
-                    onClick={() => navigate(`/pc/chat/group/${g.id}`)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-700 border border-blue-100 dark:border-gray-600 hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => navigate(`/admin/pc/chat/group/${g.id}`)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-700 border border-purple-100 dark:border-gray-600 hover:bg-purple-50 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-indigo-500 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
                       {g.avatar_url ? (
@@ -816,8 +787,7 @@ export default function ChatPage() {
           {/* НАСТРОЙКИ */}
           {tab === "settings" && (
             <div className="p-4 space-y-3">
-              {/* Профиль */}
-              <div className="bg-blue-50 dark:bg-gray-700 rounded-2xl p-4 flex items-center gap-3 transition-colors">
+              <div className="bg-purple-50 dark:bg-gray-700 rounded-2xl p-4 flex items-center gap-3 transition-colors">
                 <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                   <Avatar avatarUrl={avatarUrl} avatarLetter={avatar} size="lg" />
                   <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -838,7 +808,7 @@ export default function ChatPage() {
                         value={descInput}
                         onChange={(e) => setDescInput(e.target.value)}
                         maxLength={60}
-                        className="flex-1 px-2 py-0.5 text-xs rounded-lg border-2 border-blue-300 focus:outline-none focus:border-blue-500 dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500"
+                        className="flex-1 px-2 py-0.5 text-xs rounded-lg border-2 border-purple-300 focus:outline-none focus:border-purple-500 dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500"
                         placeholder="О себе..."
                         autoFocus
                       />
@@ -852,7 +822,7 @@ export default function ChatPage() {
                   ) : (
                     <div className="flex items-center gap-1 mt-0.5">
                       <p className="text-xs text-gray-400 truncate">{description || "Нет описания"}</p>
-                      <button onClick={() => setEditDesc(true)} className="p-0.5 text-blue-400 hover:text-blue-600 shrink-0">
+                      <button onClick={() => setEditDesc(true)} className="p-0.5 text-purple-400 hover:text-purple-600 shrink-0">
                         <ChevronRight className="w-3 h-3" />
                       </button>
                     </div>
@@ -867,37 +837,34 @@ export default function ChatPage() {
                 />
               </div>
 
-              {/* Уведомления */}
-              <div className="bg-white dark:bg-gray-700 rounded-xl border-2 border-blue-100 dark:border-gray-600 flex items-center gap-3 p-3 transition-colors">
-                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center">
-                  <Bell className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <div className="bg-white dark:bg-gray-700 rounded-xl border-2 border-purple-100 dark:border-gray-600 flex items-center gap-3 p-3 transition-colors">
+                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/40 rounded-lg flex items-center justify-center">
+                  <Bell className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 </div>
                 <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">Уведомления</span>
                 <button
                   onClick={() => setNotifications(!notifications)}
-                  className={`w-11 h-5 rounded-full transition-colors ${notifications ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                  className={`w-11 h-5 rounded-full transition-colors ${notifications ? "bg-purple-500" : "bg-gray-300 dark:bg-gray-600"}`}
                 >
                   <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform mt-0.5 ${notifications ? "translate-x-6" : "translate-x-0.5"}`} />
                 </button>
               </div>
 
-              {/* Тёмная тема */}
-              <div className="bg-white dark:bg-gray-700 rounded-xl border-2 border-blue-100 dark:border-gray-600 flex items-center gap-3 p-3 transition-colors">
+              <div className="bg-white dark:bg-gray-700 rounded-xl border-2 border-purple-100 dark:border-gray-600 flex items-center gap-3 p-3 transition-colors">
                 <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center">
                   <Moon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">Тёмная тема</span>
                 <button
                   onClick={toggle}
-                  className={`w-11 h-5 rounded-full transition-colors ${darkMode ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                  className={`w-11 h-5 rounded-full transition-colors ${darkMode ? "bg-purple-500" : "bg-gray-300 dark:bg-gray-600"}`}
                 >
                   <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform mt-0.5 ${darkMode ? "translate-x-6" : "translate-x-0.5"}`} />
                 </button>
               </div>
 
-              {/* БИТВА СМАЙЛИКОВ */}
               <button
-                onClick={() => navigate("/mobile/chat/battle")}
+                onClick={() => navigate("/admin/mobile/settings/battle")}
                 className="w-full bg-white dark:bg-gray-700 rounded-xl border-2 border-orange-100 dark:border-orange-900/40 flex items-center gap-3 p-3 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
               >
                 <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-pink-500 rounded-lg flex items-center justify-center">
@@ -910,7 +877,6 @@ export default function ChatPage() {
                 <ChevronRight className="w-4 h-4 text-gray-400" />
               </button>
 
-              {/* WINTOZO PRO */}
               <div className="bg-white dark:bg-gray-700 rounded-xl border-2 border-yellow-100 dark:border-yellow-900/40 overflow-hidden transition-colors">
                 <div className="flex items-center gap-3 p-3 border-b border-yellow-50 dark:border-yellow-900/20">
                   <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-lg flex items-center justify-center">
@@ -936,7 +902,7 @@ export default function ChatPage() {
                         onClick={() => setShowColorPicker(!showColorPicker)}
                         className="w-full flex items-center gap-3 p-3 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 transition-colors"
                       >
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: messageColor || "#3b82f6" }}>
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: messageColor || "#8b5cf6" }}>
                           <MessageSquare className="w-3.5 h-3.5 text-white" />
                         </div>
                         <div className="flex-1 text-left">
@@ -948,7 +914,7 @@ export default function ChatPage() {
                       {showColorPicker && (
                         <div className="px-3 pb-3">
                           <div className="grid grid-cols-6 gap-1.5">
-                            {["#3b82f6", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#6366f1", "#a855f7", "#78716c"].map((c) => (
+                            {["#8b5cf6", "#3b82f6", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#6366f1", "#a855f7", "#78716c"].map((c) => (
                               <button
                                 key={c}
                                 onClick={() => handleColorChange(c)}
@@ -968,75 +934,19 @@ export default function ChatPage() {
                         </div>
                       )}
                     </div>
-
-                    {/* Цвет приложения */}
-                    <div>
-                      <button
-                        onClick={() => setShowAppColorPicker(!showAppColorPicker)}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 transition-colors"
-                      >
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: appAccentColor || "#3b82f6" }}>
-                          <Palette className="w-3.5 h-3.5 text-white" />
-                        </div>
-                        <div className="flex-1 text-left">
-                          <div className="text-xs font-medium text-gray-800 dark:text-gray-200">Цвет приложения</div>
-                          <div className="text-[10px] text-gray-400">Цвет шапки и кнопок</div>
-                        </div>
-                        <ChevronRight className="w-3 h-3 text-gray-400" />
-                      </button>
-                      {showAppColorPicker && (
-                        <div className="px-3 pb-3">
-                          <div className="grid grid-cols-6 gap-1.5">
-                            {["#3b82f6", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#6366f1", "#a855f7", "#78716c"].map((c) => (
-                              <button
-                                key={c}
-                                onClick={() => handleAppColorChange(c)}
-                                className={`w-full aspect-square rounded-lg border-2 transition-all ${
-                                  appAccentColor === c ? "border-gray-800 dark:border-white scale-110" : "border-transparent"
-                                }`}
-                                style={{ backgroundColor: c }}
-                              />
-                            ))}
-                            <button
-                              onClick={() => handleAppColorChange("")}
-                              className="w-full aspect-square rounded-lg border-2 border-gray-200 dark:border-gray-600 flex items-center justify-center text-[10px] text-gray-400"
-                            >
-                              Сброс
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="border-b border-yellow-50 dark:border-yellow-900/20">
-                      <button
-                        onClick={handleContactAdmin}
-                        disabled={adminContacts <= 0}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 transition-colors disabled:opacity-50"
-                      >
-                        <div className="w-7 h-7 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                          <Shield className="w-3.5 h-3.5 text-red-500" />
-                        </div>
-                        <div className="flex-1 text-left">
-                          <div className="text-xs font-medium text-gray-800 dark:text-gray-200">Написать админу</div>
-                          <div className="text-[10px] text-gray-400">Осталось: {adminContacts} из 2</div>
-                        </div>
-                      </button>
-                    </div>
                   </>
                 )}
               </div>
 
-              {/* Конфиденциальность + О приложении */}
-              <div className="bg-white dark:bg-gray-700 rounded-xl border-2 border-blue-100 dark:border-gray-600 overflow-hidden transition-colors">
-                <button className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors border-b border-blue-50 dark:border-gray-600">
+              <div className="bg-white dark:bg-gray-700 rounded-xl border-2 border-purple-100 dark:border-gray-600 overflow-hidden transition-colors">
+                <button className="w-full flex items-center gap-3 p-3 hover:bg-purple-50 dark:hover:bg-gray-600 transition-colors border-b border-purple-50 dark:border-gray-600">
                   <div className="w-8 h-8 bg-green-100 dark:bg-green-900/40 rounded-lg flex items-center justify-center">
                     <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
                   </div>
                   <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">Конфиденциальность</span>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
                 </button>
-                <button className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors">
+                <button className="w-full flex items-center gap-3 p-3 hover:bg-purple-50 dark:hover:bg-gray-600 transition-colors">
                   <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/40 rounded-lg flex items-center justify-center">
                     <Info className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                   </div>
@@ -1045,7 +955,6 @@ export default function ChatPage() {
                 </button>
               </div>
 
-              {/* Выход */}
               <button
                 onClick={handleLogout}
                 className="w-full bg-white dark:bg-gray-700 rounded-xl border-2 border-red-100 dark:border-red-900/40 flex items-center gap-3 p-3 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -1053,10 +962,10 @@ export default function ChatPage() {
                 <div className="w-8 h-8 bg-red-100 dark:bg-red-900/40 rounded-lg flex items-center justify-center">
                   <LogOut className="w-4 h-4 text-red-600 dark:text-red-400" />
                 </div>
-                <span className="flex-1 text-sm font-medium text-red-600 dark:text-red-400">Выйти из аккаунта</span>
+                <span className="flex-1 text-sm font-medium text-red-600 dark:text-red-400">Выйти</span>
               </button>
 
-              <p className="text-center text-xs text-gray-400 pt-2">Wintozo v1.0 — Test</p>
+              <p className="text-center text-xs text-gray-400 pt-2">Wintozo Admin v1.0</p>
             </div>
           )}
         </div>
@@ -1066,7 +975,7 @@ export default function ChatPage() {
       {selectedUser ? (
         <div className="flex-1 flex flex-col h-screen">
           {/* Шапка чата */}
-          <div className="bg-white dark:bg-gray-800 border-b-2 border-blue-200 dark:border-gray-700 p-4 flex items-center gap-3 transition-colors">
+          <div className="bg-white dark:bg-gray-800 border-b-2 border-purple-200 dark:border-gray-700 p-4 flex items-center gap-3 transition-colors">
             {selectedUser.username === username ? (
               <>
                 <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shrink-0">
@@ -1074,9 +983,7 @@ export default function ChatPage() {
                 </div>
                 <div>
                   <p className="font-bold text-gray-800 dark:text-gray-100">Избранное</p>
-                  <p className="text-xs text-gray-400">
-                    {username === "Admin" ? "Введите /admin для панели управления" : "Ваши сохранённые сообщения"}
-                  </p>
+                  <p className="text-xs text-gray-400">Ваши сохранённые сообщения</p>
                 </div>
               </>
             ) : (
@@ -1138,9 +1045,9 @@ export default function ChatPage() {
           )}
 
           {/* Сообщения */}
-          <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 transition-colors">
+          <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-purple-50 to-white dark:from-gray-900 dark:to-gray-800 transition-colors">
             {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-blue-400">
+              <div className="h-full flex flex-col items-center justify-center text-purple-400">
                 <MessageCircleIcon className="w-16 h-16 mb-4 opacity-50" />
                 <p className="text-lg font-medium">Нет сообщений</p>
                 <p className="text-sm">Напишите первое сообщение!</p>
@@ -1154,8 +1061,8 @@ export default function ChatPage() {
                       <div
                         className={`max-w-xs sm:max-w-md px-4 py-3 rounded-2xl transition-colors ${
                           isOwn
-                            ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-tr-sm"
-                            : "bg-white dark:bg-gray-700 border-2 border-blue-100 dark:border-gray-600 text-gray-800 dark:text-gray-100 rounded-tl-sm shadow-sm"
+                            ? "bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-tr-sm"
+                            : "bg-white dark:bg-gray-700 border-2 border-purple-100 dark:border-gray-600 text-gray-800 dark:text-gray-100 rounded-tl-sm shadow-sm"
                         }`}
                       >
                         {msg.audio_url ? (
@@ -1170,7 +1077,7 @@ export default function ChatPage() {
                         ) : (
                           <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
                         )}
-                        <p className={`text-xs mt-1 ${isOwn ? "text-blue-100" : "text-gray-400"}`}>
+                        <p className={`text-xs mt-1 ${isOwn ? "text-purple-100" : "text-gray-400"}`}>
                           {formatTime(msg.created_at)}
                         </p>
                       </div>
@@ -1183,10 +1090,10 @@ export default function ChatPage() {
           </div>
 
           {/* Форма отправки */}
-          <form onSubmit={handleSendText} className="bg-white dark:bg-gray-800 border-t-2 border-blue-200 dark:border-gray-700 p-3 flex items-center gap-2 transition-colors">
+          <form onSubmit={handleSendText} className="bg-white dark:bg-gray-800 border-t-2 border-purple-200 dark:border-gray-700 p-3 flex items-center gap-2 transition-colors">
             {sendingImage ? (
               <div className="flex-1 flex items-center justify-center py-3">
-                <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-500 rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-purple-300 border-t-purple-500 rounded-full animate-spin" />
                 <span className="text-sm text-gray-400 ml-2">Отправка фото...</span>
               </div>
             ) : isRecording ? (
@@ -1208,7 +1115,7 @@ export default function ChatPage() {
                   type="button"
                   onClick={handleSendVoice}
                   disabled={sendingVoice}
-                  className="px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold rounded-xl disabled:opacity-50 shrink-0"
+                  className="px-4 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl disabled:opacity-50 shrink-0"
                 >
                   <Send className="w-5 h-5" />
                 </button>
@@ -1219,8 +1126,8 @@ export default function ChatPage() {
                   type="text"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder={selectedUser.username === username ? (username === "Admin" ? "Введите /admin..." : "Напишите сообщение...") : "Напишите сообщение..."}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-blue-200 dark:border-gray-600 focus:border-blue-500 focus:outline-none text-gray-800 dark:text-gray-100 dark:bg-gray-700 dark:placeholder-gray-500 font-medium transition-colors"
+                  placeholder={selectedUser.username === username ? "Напишите сообщение..." : "Напишите сообщение..."}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-purple-200 dark:border-gray-600 focus:border-purple-500 focus:outline-none text-gray-800 dark:text-gray-100 dark:bg-gray-700 dark:placeholder-gray-500 font-medium transition-colors"
                   maxLength={1000}
                 />
                 <button
@@ -1247,7 +1154,7 @@ export default function ChatPage() {
                 <button
                   type="submit"
                   disabled={!inputText.trim()}
-                  className="px-5 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center gap-2 shrink-0"
+                  className="px-5 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold rounded-xl hover:from-purple-600 hover:to-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center gap-2 shrink-0"
                 >
                   <Send className="w-5 h-5" />
                 </button>
@@ -1256,31 +1163,21 @@ export default function ChatPage() {
           </form>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
+        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
           <div className="text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-3xl mx-auto mb-4 flex items-center justify-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-purple-400 to-indigo-500 rounded-3xl mx-auto mb-4 flex items-center justify-center">
               <MessageCircleIcon className="w-10 h-10 text-white" />
             </div>
-            <h2 className="text-2xl font-black text-blue-900 dark:text-blue-100 mb-2">Wintozo</h2>
-            <p className="text-blue-600 dark:text-blue-400">Выберите собеседника слева</p>
+            <h2 className="text-2xl font-black text-purple-900 dark:text-purple-100 mb-2">Wintozo Admin</h2>
+            <p className="text-purple-600 dark:text-purple-400">Выберите собеседника слева</p>
           </div>
         </div>
       )}
 
-      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
       <input ref={photoFileRef} type="file" accept="image/*" className="hidden" onChange={handleSendImage} />
       {showProfile && selectedUser && <UserProfileModal username={selectedUser.username} onClose={() => setShowProfile(false)} />}
-      {(showCallModal || showIncomingCallModal) && (
-        <CallModal 
-          currentUsername={username} 
-          callTarget={String(showCallModal ? callTarget : incomingCallTarget || '')} 
-          onClose={() => { 
-            if (showCallModal) closeCall();
-            else { setShowIncomingCallModal(false); setIncomingCallTarget(null); }
-          }} 
-          onIncoming={() => setShowIncomingCallModal(true)} 
-        />
-      )}
+      {showTerminal && <AdminTerminal onClose={() => setShowTerminal(false)} />}
+      {showCallModal && callTarget && <CallModal currentUsername={username} callTarget={callTarget} onClose={closeCall} />}
     </div>
   );
 }

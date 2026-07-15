@@ -92,6 +92,7 @@ export default function MobileCreateGroup() {
           name: groupName.trim(),
           avatar_url: avatarUrl,
           created_by: username,
+          creator: username,
         })
         .select()
         .single();
